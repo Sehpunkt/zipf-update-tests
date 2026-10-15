@@ -59,6 +59,15 @@ jobs:
 
       - name: Seiten laden
         run: |
+          set +e
           FEHLER=0
+          for PFAD in / /shop/ /warenkorb/ /kasse/; do
+            echo "--- ${PFAD} ---"
+            CODE=$(curl -sS -o seite.html -w '%{http_code}' "${SITE_URL}${PFAD}")
+            echo "HTTP ${CODE}"
+            test "$CODE" = "200" || FEHLER=1
+            grep -nE 'Warning:|Notice:|Deprecated:|Fatal error' seite.html | head -5 && FEHLER=1
+          done
+          exit $FEHLER
 
           for PFAD in "/"

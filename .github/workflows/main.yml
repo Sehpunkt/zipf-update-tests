@@ -8,6 +8,9 @@ on:
     # Täglicher Kontrolllauf, 05:40 UTC
     - cron: '40 5 * * *'
 
+env:
+  SITE_URL: https://www.zipf.com
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -26,32 +29,23 @@ jobs:
           echo "Änderungen:"
           echo "${{ github.event.client_payload.changes }}"
 
-      - name: Secrets prüfen
+      - name: Schlüssel prüfen
         env:
-          SITE_URL: ${{ secrets.SITE_URL }}
           ZUM_KEY: ${{ secrets.ZUM_KEY }}
         run: |
-          if [ -z "$SITE_URL" ]; then
-            echo "::error::Secret SITE_URL ist nicht gesetzt."
-            exit 1
-          fi
           if [ -z "$ZUM_KEY" ]; then
             echo "::error::Secret ZUM_KEY ist nicht gesetzt."
             exit 1
           fi
-          echo "Secrets vorhanden."
+          echo "Schlüssel vorhanden, Ziel: ${SITE_URL}"
 
       - name: Status abrufen
         env:
-          SITE_URL: ${{ secrets.SITE_URL }}
           ZUM_KEY: ${{ secrets.ZUM_KEY }}
         run: |
-          # Abschließenden Schrägstrich entfernen, falls vorhanden
-          BASE="${SITE_URL%/}"
-
           curl -sS --fail-with-body \
             -H "X-Monitor-Key: ${ZUM_KEY}" \
-            "${BASE}/wp-json/zipf-update-monitor/v1/status" \
+            "${SITE_URL}/wp-json/zipf-update-monitor/v1/status" \
             -o status.json
 
           echo "--- Versionen ---"
@@ -63,34 +57,8 @@ jobs:
           echo "--- Aktive Plugins ---"
           jq -r '.plugins | to_entries[] | select(.value.active) | "\(.value.name) \(.value.version)"' status.json
 
-      - name: Startseite laden
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
+      - name: Seiten laden
         run: |
-          BASE="${SITE_URL%/}"
-          curl -sS --fail-with-body "${BASE}/" -o home.html
+          FEHLER=0
 
-          # PHP-Meldungen im HTML sind ein harter Fehler
-          if grep -qE 'Warning:|Notice:|Deprecated:|Fatal error' home.html; then
-            echo "::error::PHP-Meldungen im HTML der Startseite gefunden."
-            grep -nE 'Warning:|Notice:|Deprecated:|Fatal error' home.html | head -5
-            exit 1
-          fi
-          echo "Startseite ohne PHP-Meldungen."
-
-      - name: Ergebnis zurückmelden
-        if: always()
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          ZUM_KEY: ${{ secrets.ZUM_KEY }}
-          RESULT: ${{ job.status }}
-        run: |
-          BASE="${SITE_URL%/}"
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-          curl -sS -X POST \
-            -H "X-Monitor-Key: ${ZUM_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{\"result\":\"${RESULT}\",\"run_url\":\"${RUN_URL}\",\"summary\":\"Lauf ${{ github.run_number }}, Auslöser ${{ github.event_name }}\"}" \
-            "${BASE}/wp-json/zipf-update-monitor/v1/report" \
-            || echo "Rückmeldung fehlgeschlagen, Lauf selbst bleibt gewertet."
+          for PFAD in "/"

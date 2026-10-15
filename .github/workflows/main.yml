@@ -97,3 +97,27 @@ jobs:
             "${SITE_URL}/wp-json/zipf-update-monitor/v1/report" \
             || echo "Rückmeldung fehlgeschlagen, Lauf selbst bleibt gewertet."
 
+
+      - name: Testbestellung
+        if: github.event.client_payload.run_type == 'after-update'
+        env:
+          ZUM_KEY: ${{ secrets.ZUM_KEY }}
+        run: |
+          curl -sS --fail-with-body -X POST \
+            -H "X-Monitor-Key: ${ZUM_KEY}" \
+            "${SITE_URL}/wp-json/zipf-update-monitor/v1/test-order" \
+            -o order.json
+          jq -r '.checks[]? | "\(.status) \(.name) \(.detail)"' order.json
+          echo "ORDER_ID=$(jq -r '.order_id // empty' order.json)" >> $GITHUB_ENV
+          jq -e '.ok == true and ([.checks[]? | select(.status != "ok")] | length == 0)' order.json > /dev/null
+
+      - name: Testbestellung stornieren
+        if: always() && env.ORDER_ID != ''
+        env:
+          ZUM_KEY: ${{ secrets.ZUM_KEY }}
+        run: |
+          curl -sS -X POST \
+            -H "X-Monitor-Key: ${ZUM_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"order_id\": ${ORDER_ID}}" \
+            "${SITE_URL}/wp-json/zipf-update-monitor/v1/cleanup-order"

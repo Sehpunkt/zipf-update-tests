@@ -1,0 +1,25 @@
+name: Shop-Tests
+
+on:
+  repository_dispatch:
+    types: [wp-updated]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auslöser anzeigen
+        run: |
+          echo "Auslöser: ${{ github.event_name }}"
+          echo "Art:      ${{ github.event.client_payload.run_type }}"
+          echo "Site:     ${{ github.event.client_payload.site }}"
+          echo "Änderungen:"
+          echo "${{ github.event.client_payload.changes }}"
+
+      - name: Status abrufen
+        run: |
+          curl -sS -f \
+            -H "X-Monitor-Key: ${{ secrets.MONITOR_KEY }}" \
+            "${{ secrets.SITE_URL }}/wp-json/zipf-update-monitor/v1/status" \
+          | head -c 2000

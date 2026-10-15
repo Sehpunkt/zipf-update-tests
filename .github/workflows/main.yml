@@ -71,3 +71,29 @@ jobs:
           exit $FEHLER
 
           for PFAD in "/"
+
+      - name: Ergebnis zurückmelden
+        if: always()
+        env:
+          ZUM_KEY: ${{ secrets.ZUM_KEY }}
+          RESULT: ${{ job.status }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          STATUS_CHECK=$([ "$RESULT" = "success" ] && echo ok || echo fail)
+          cat > payload.json <<JSON
+          {
+            "result": "${RESULT}",
+            "run_url": "${RUN_URL}",
+            "summary": "Lauf ${{ github.run_number }}, Auslöser ${{ github.event_name }}",
+            "checks": [
+              { "name": "Seiten erreichbar und ohne PHP-Meldungen", "status": "${STATUS_CHECK}", "detail": "" }
+            ]
+          }
+          JSON
+          curl -sS -X POST \
+            -H "X-Monitor-Key: ${ZUM_KEY}" \
+            -H "Content-Type: application/json" \
+            --data @payload.json \
+            "${SITE_URL}/wp-json/zipf-update-monitor/v1/report" \
+            || echo "Rückmeldung fehlgeschlagen, Lauf selbst bleibt gewertet."
+
